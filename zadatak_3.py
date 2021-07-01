@@ -298,7 +298,7 @@ print('Pozdrav! ({})'.format(vrijeme))
 
 #   glavna petlja
 while (True):
-    #ispisi_odziv()
+    ispisi_odziv()
     unos = input()
     unos_split = unos.split()
     #   ako je lista prazna, preskoci egzekuciju (kako se ne bi pristupalo indeksima kojih nema)
