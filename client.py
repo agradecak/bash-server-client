@@ -1,7 +1,10 @@
-
+from OpenSSL import SSL
 import socket
 
+# ctx = SSL.Context(SSL.TLSv1_2_METHOD)
+
 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+# ssock = SSL.Connection(ctx, sock)
 sock.connect(('localhost', 5000))
 
 # primanje adrese i socketa
@@ -28,4 +31,5 @@ sock.send(podaci)
 primljeni_podaci = sock.recv(1024)
 print(primljeni_podaci.decode())
 
+# ssock.shutdown()
 sock.close()
