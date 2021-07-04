@@ -308,3 +308,27 @@ while (True):
     else:
         povijest.append(unos)
         izvrsi(unos_split)
+
+
+# while (True)
+#     klijent
+#         while (True):
+#             ispisi_odziv()
+#             unos = input()
+#             podaci = unos.encrypt()
+#             send(podaci)
+
+#             recv(1024)
+
+#     server
+#         recv(1024)
+
+#         unos_split = unos.split()
+#         podaci = ''
+#         if not unos_split:
+#             continue
+#         else:
+#             povijest.append(unos)
+#             podaci = izvrsi(unos_split)
+
+#         send(podaci)
