@@ -35,7 +35,6 @@ def upravljacQUIT(broj_signala, stog):
 def upravljacTERM(broj_signala, stog):
     print('Pristigao je signal broj 15. Program se zavrsava.')
     sys.exit()
-    return
 
 #   signali koji su usmjereni na posebne upravljace
 signal.signal(signal.SIGINT, signal.SIG_DFL)
@@ -52,62 +51,59 @@ def ispisi_odziv():
     op_sustav = os.uname()[0]
     korisnik = os.getlogin()
     direktorij = os.getcwd()
-    print('({}::{}){} $ '.format(korisnik, op_sustav, direktorij), end = '')
+    print('({}::{}){} $ '.format(korisnik, op_sustav, direktorij), end='')
 
 #   provjerava unos naredbi
 def izvrsi(naredba_lista):
     #   funkcija radi za prepoznavanje naredbi
     #   funkcijama se proslijedjuje korisnicki unos u obliku liste (naredba, parametar, argument...)
-    if naredba_lista[0] == 'pwd': pwd(naredba_lista)
-    elif naredba_lista[0] == 'ps': ps(naredba_lista)
-    elif naredba_lista[0] == 'echo': echo(naredba_lista)
-    elif naredba_lista[0] == 'kill': kill(naredba_lista)
-    elif naredba_lista[0] == 'cd': cd(naredba_lista)
-    elif naredba_lista[0] == 'date': date(naredba_lista)
-    elif naredba_lista[0] == 'ls': ls(naredba_lista)
-    elif naredba_lista[0] == 'touch': touch(naredba_lista)
-    elif naredba_lista[0] == 'rm': rm(naredba_lista)
-    elif naredba_lista[0] == 'kvadrat': kvadrat(naredba_lista)
-    elif naredba_lista[0] == 'izlaz' or naredba_lista[0] == 'odjava':
-        #   ispisuje sadrzaj liste povijest u datoteku .hist prije izlaza iz sesije
-        povijest_ispis = open(kucni_dir + '/.hist', 'w')
-        for stavka in povijest:
-            povijest_ispis.write(stavka)
-            povijest_ispis.write('\n')
-        povijest_ispis.close()
-        sys.exit()
+    if naredba_lista[0] == 'pwd': return pwd(naredba_lista)
+    elif naredba_lista[0] == 'ps': return ps(naredba_lista)
+    elif naredba_lista[0] == 'echo': return echo(naredba_lista)
+    elif naredba_lista[0] == 'kill': return kill(naredba_lista)
+    elif naredba_lista[0] == 'cd': return cd(naredba_lista)
+    elif naredba_lista[0] == 'date': return date(naredba_lista)
+    elif naredba_lista[0] == 'ls': return ls(naredba_lista)
+    elif naredba_lista[0] == 'touch': return touch(naredba_lista)
+    elif naredba_lista[0] == 'rm': return rm(naredba_lista)
+    elif naredba_lista[0] == 'kvadrat': return kvadrat(naredba_lista)
+    elif naredba_lista[0] == 'remoteshd': return remoteshd(naredba_lista)
+    elif naredba_lista[0] == 'remotesh': return remotesh(naredba_lista)
+    elif naredba_lista[0] == 'izlaz' or naredba_lista[0] == 'odjava': return izlaz()
     else:
-        print('Neprepoznata naredba.')
+        return 'Neprepoznata naredba.'
 
 #   ispisuje apsolutnu adresu trenutnog direktorija ili obavjestava o krivom unosu
 def pwd(lista):
     if len(lista) == 1:
-        print(os.getcwd())
+        return os.getcwd()
     else:
-        print('Naredba ne prima parametre ni argumente.')
+        return "Naredba ne prima parametre ni argumente."
 
 #   ispisuje PID trenutnog procesa ili obavjestava o krivom unosu
 def ps(lista):
     if len(lista) == 1:
-	    print(os.getpid())
+	    return os.getpid()
     else:
-	    print('Nepostojeci parametar ili argument.')
+	    return "Nepostojeci parametar ili argument."
 
 #   ispisuje korisnicki string ili obavjestava o krivom unosu
 def echo(lista):
     if len(lista) == 1:
-        print("Naredba prima barem jedan argument.")
+        return "Naredba prima barem jedan argument."
     else:
+        to_print = ''
         for dat in lista[1:]:
             dat = dat.replace('"', '')
             dat = dat.replace("'", '')
-            print(dat, end=' ')
-        print('')
+            to_print += dat + ' ' 
+        to_print += '\n'
+        return to_print
 
 #   obraduje signal ili obavjestava o krivom unosu
 def kill(lista):
     if len(lista) == 1:
-        print("Naredba prima tocno jedan parametar: naziv signala ili njegov redni broj.")
+        return "Naredba prima tocno jedan parametar: naziv signala ili njegov redni broj."
     else:
         parametar = lista[1]
         #   postavljanje adekvatne vrijednosti signala na temelju korisnickog unosa/stringa
@@ -124,70 +120,78 @@ def kill(lista):
             os.kill(os.getpid(), signal)
         except:
             #   inace, ispis pogreske
-            print('Pogreska. Naredba prima tocno jedan parametar, ID signala.')
+            return 'Pogreska. Naredba prima tocno jedan parametar, ID signala.'
 
 #   mjenja direktorij ovisno o koristenom parametru
 def cd(lista):
     #   izvrsava se ako nema parametara
     if len(lista) == 1:
         os.chdir(kucni_dir)
+        return ''
     #   izvrsava se ako ima jedan parametar
     elif len(lista) == 2:
         #   radi se slice prva dva karaktera u parametru, za provjeru parametra
         param = lista[1][0:2]
         if param == '.':
-            pass
+            return ''
         elif param == '..':
             roditelj = os.path.join(os.getcwd(), os.pardir)
             os.chdir(roditelj)
+            return ''
         elif param == './':
             #   ako je adresa nepostojeca, ispisuje se obavijest o pogresci
             try:
                 odrediste = lista[1].strip('./')
                 dublje = os.path.join(os.getcwd(), odrediste)
                 os.chdir(dublje)
+                return ''
             except:
-                print('Nepostojeca adresa.')
+                return 'Nepostojeca adresa.'
         elif lista[1][0:1] == '/':
             try:
                 os.chdir(lista[1])
+                return ''
             except:
-                print('Nepostojeca adresa.')
+                return 'Nepostojeca adresa.'
         else:
-            print('Nepostojeci parametar.')
+            return 'Nepostojeci parametar.'
     #   izvrsava se ako ima previse parametara
     else:
-        print('Dopusten je unos samo jednog parametra.')
+        return 'Dopusten je unos samo jednog parametra.'
 
 #   ispisuje posebno formatirano vrijeme, u kratkom ili dugom obliku dana u tjednu
 def date(lista):
     if len(lista) == 1:
-        print(time.strftime("%H<>%M<>%S %A %d./%m./%Y", time.localtime()))
+        return time.strftime("%H<>%M<>%S %A %d./%m./%Y", time.localtime())
     elif len(lista) == 2 and lista[1] == '-w':
-        print(time.strftime("%H<>%M<>%S %a %d./%m./%Y", time.localtime()))
+        return time.strftime("%H<>%M<>%S %a %d./%m./%Y", time.localtime())
     else:
-        print("Naredba prima najvise jedan parametar (-w).")
+        return "Naredba prima najvise jedan parametar (-w)."
 
 #   ispisuje sadrzaj direktorija, ovisno o adresi na koju pokazujemo
 def ls(lista):
     #   izvrsava se ukoliko nije zadan ni argument ni parametar
     if len(lista) == 1:
         sadrzaj = os.scandir()
+        to_print = ''
         for dat in sadrzaj:
             #   ako datoteka nije sakrivena (pocinje sa '.'), ispisi podatke
             if not dat.name[0] == '.':
-                print(dat.name)
+                to_print += dat.name + '\n'
+        return to_print
     #   izvrsava se ukoliko je zadan samo argument -l, za dugi ispis trenutnog direktorija
     elif len(lista) == 2 and lista[1] == '-l':
         sadrzaj = os.scandir()
+        to_print = ''
         #   ispis i formatiranje naziva podataka (sirina i poravnanje)
-        print('{: <20}{: >10}{: >10}{: >10}{: >10}{: >10}'.format('Name', 'Mode' , 'Nlinks', 'UID', 'GID', 'Size'))
-        print('-' * 70)
+        to_print += '{: <20}{: >10}{: >10}{: >10}{: >10}{: >10}'.format('Name', 'Mode' , 'Nlinks', 'UID', 'GID', 'Size') + '\n'
+        to_print += ('-' * 70) + '\n'
         for dat in sadrzaj:
             if not dat.name[0] == '.':
                 info = dat.stat()
                 #   (limitacija) ispis je uredan samo za datoteke duljine do 20 karaktera
-                print('{: <20}{: >10}{: >10}{: >10}{: >10}{: >10}'.format(dat.name, info.st_mode, info.st_nlink, info.st_uid, info.st_gid, info.st_size))
+                to_print += '{: <20}{: >10}{: >10}{: >10}{: >10}{: >10}'.format(dat.name, info.st_mode, info.st_nlink, info.st_uid, info.st_gid, info.st_size) + '\n'
+        return to_print
     #   izvrsava se ukoliko je zadana relativna adresa direktorija
     elif len(lista) == 2 and lista[1][0:2] == './':
         #   ispituje se valjanost pristupa direktoriju
@@ -195,52 +199,76 @@ def ls(lista):
             odrediste = lista[1].strip('./')
             dublje = os.path.join(os.getcwd(), odrediste)
             sadrzaj = os.scandir(dublje)
+            to_print = ''
             for dat in sadrzaj:
                 #   ako datoteka nije sakrivena (pocinje sa '.'), ispisi podatke
                 if not dat.name[0] == '.':
-                    print(dat.name)
+                    to_print += dat.name + '\n'
+            return to_print
         #   inace baca obavijest o krivom pristupu
         except:
-            print('Nepostojeca adresa.')
+            return 'Nepostojeca adresa.'
     #   izvrsava se ukoliko je zadan dugi ispis direktorija na relativnoj adresi
     elif len(lista) == 3 and lista[1] == '-l' and lista[2][0:2] == './':
         try:
             odrediste = lista[2].strip('./')
             dublje = os.path.join(os.getcwd(), odrediste)
             sadrzaj = os.scandir(dublje)
-            print('{: <20}{: >10}{: >10}{: >10}{: >10}{: >10}'.format('Name', 'Mode' , 'Nlinks', 'UID', 'GID', 'Size'))
-            print('-' * 70)
+            to_print = ''
+            to_print += '{: <20}{: >10}{: >10}{: >10}{: >10}{: >10}'.format('Name', 'Mode' , 'Nlinks', 'UID', 'GID', 'Size') + '\n' 
+            to_print += ('-' * 70) + '\n'
             for dat in sadrzaj:
                 if not dat.name[0] == '.':
                     info = dat.stat()
-                    print('{: <20}{: >10}{: >10}{: >10}{: >10}{: >10}'.format(dat.name, info.st_mode, info.st_nlink, info.st_uid, info.st_gid, info.st_size))
+                    to_print += '{: <20}{: >10}{: >10}{: >10}{: >10}{: >10}'.format(dat.name, info.st_mode, info.st_nlink, info.st_uid, info.st_gid, info.st_size) + '\n'
+            return to_print
         except:
-            print('Nepostojeca adresa.')
+            return 'Nepostojeca adresa.'
     #   ispisuje pogresku ukoliko je uneseno previse argumenata, ili krivih
     else:
-        print('Naredba prima najvise jedan parametar (-l) i jedan argument (rel. adresu).')
+        return 'Naredba prima najvise jedan parametar (-l) i jedan argument (rel. adresu).'
 
-#   stvara datoteku na adresi ukoliko ona vec ne postoji
+#   stvara datoteku na adresi ukoliko ona ne postoji
 def touch(lista):
     odrediste = lista[1]
     if os.path.isfile(odrediste):
-        print('Datoteka vec postoji.')
+        return 'Datoteka vec postoji.'
     else:
         #   ako pristup ne uspijeva
         try:
             open(odrediste, 'w').close()
+            return ''
         #   ispisuje se pogreska
         except:
-            print('Nepostojeca adresa.')
+            return 'Nepostojeca adresa.'
 
 #   brise datoteku na adresi ukoliko ona tamo postoji
 def rm(lista):
     odrediste = lista[1]
     if os.path.isfile(odrediste):
         os.remove(odrediste)
+        return ''
     #   ispisuje pogresku ako je pristup datoteci nevaljan
     else:
-        print('Datoteka ne postoji.')
+        return 'Datoteka ne postoji.'
+
+def remoteshd():
+    return
+
+
+def remotesh():
+
+    return
+
+# izlaz iz aplikacije slanjem False vrijednosti koja prekida glavnu petlju
+def izlaz():
+    #   ispisuje sadrzaj liste povijest u datoteku .hist prije izlaza iz sesije
+    povijest_ispis = open(kucni_dir + '/.hist', 'w')
+    for stavka in povijest:
+        povijest_ispis.write(stavka)
+        povijest_ispis.write('\n')
+    povijest_ispis.close()
+    return False
 
 
 #   ________________________________________________________________________________
@@ -281,6 +309,7 @@ def kvadrat(lista):
     nit2.join()
     nit3.join()
     nit4.join()
+    return ''
 
 #   cetiri niti koje dijele resurs broj i izvrsavaju zadacu oduzimanja kvadrata
 #   zadacu kvadriranja brojeva od 1 do 95959 dijele proslijedjujuci svoj pocetak i kraj u funkciju
@@ -297,7 +326,8 @@ nit4 = threading.Thread(target=oduzmi_kvad, args=(4, 72000, 95960))
 print('Pozdrav! ({})'.format(vrijeme))
 
 #   glavna petlja
-while (True):
+is_running = True
+while (is_running):
     ispisi_odziv()
     unos = input()
     unos_split = unos.split()
@@ -307,7 +337,11 @@ while (True):
     #   ako lista nije prazna, dodaj u .hist, provjeri postoji li definicija i izvrsi naredbu
     else:
         povijest.append(unos)
-        izvrsi(unos_split)
+        rezultat = izvrsi(unos_split)
+        if rezultat == False :
+            is_running = False
+            rezultat = ''
+        print(rezultat)
 
 
 # while (True)
