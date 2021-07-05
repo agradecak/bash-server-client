@@ -1,10 +1,10 @@
 #   ________________________________________________________________________________
 #   MODULI
-import os
-import time
-import sys
-import signal
-import threading
+import os, time, sys, signal, threading, configparser, socket, crypt
+from cryptography.hazmat.primitives.asymmetric import rsa, padding
+from cryptography.hazmat.primitives import serialization, hashes
+from cryptography.fernet import Fernet
+from hmac import compare_digest as compare_hash
 
 
 #   ________________________________________________________________________________
@@ -51,7 +51,7 @@ def ispisi_odziv():
     op_sustav = os.uname()[0]
     korisnik = os.getlogin()
     direktorij = os.getcwd()
-    print('({}::{}){} $ '.format(korisnik, op_sustav, direktorij), end='')
+    return '({}::{}){} $ '.format(korisnik, op_sustav, direktorij)
 
 #   provjerava unos naredbi
 def izvrsi(naredba_lista):
@@ -67,30 +67,30 @@ def izvrsi(naredba_lista):
     elif naredba_lista[0] == 'touch': return touch(naredba_lista)
     elif naredba_lista[0] == 'rm': return rm(naredba_lista)
     elif naredba_lista[0] == 'kvadrat': return kvadrat(naredba_lista)
-    elif naredba_lista[0] == 'remoteshd': return remoteshd(naredba_lista)
-    elif naredba_lista[0] == 'remotesh': return remotesh(naredba_lista)
-    elif naredba_lista[0] == 'izlaz' or naredba_lista[0] == 'odjava': return izlaz()
+    elif naredba_lista[0] == 'remoteshd': remoteshd()
+    elif naredba_lista[0] == 'remotesh': remotesh()
+    elif naredba_lista[0] in ('izlaz', 'odjava'): return izlaz()
     else:
-        return 'Neprepoznata naredba.'
+        return 'Neprepoznata naredba.\n'
 
 #   ispisuje apsolutnu adresu trenutnog direktorija ili obavjestava o krivom unosu
 def pwd(lista):
     if len(lista) == 1:
         return os.getcwd()
     else:
-        return "Naredba ne prima parametre ni argumente."
+        return "Naredba ne prima parametre ni argumente.\n"
 
 #   ispisuje PID trenutnog procesa ili obavjestava o krivom unosu
 def ps(lista):
     if len(lista) == 1:
 	    return os.getpid()
     else:
-	    return "Nepostojeci parametar ili argument."
+	    return "Nepostojeći parametar ili argument.\n"
 
 #   ispisuje korisnicki string ili obavjestava o krivom unosu
 def echo(lista):
     if len(lista) == 1:
-        return "Naredba prima barem jedan argument."
+        return "Naredba prima barem jedan argument.\n"
     else:
         to_print = ''
         for dat in lista[1:]:
@@ -103,7 +103,7 @@ def echo(lista):
 #   obraduje signal ili obavjestava o krivom unosu
 def kill(lista):
     if len(lista) == 1:
-        return "Naredba prima tocno jedan parametar: naziv signala ili njegov redni broj."
+        return "Naredba prima točno jedan parametar: naziv signala ili njegov redni broj.\n"
     else:
         parametar = lista[1]
         #   postavljanje adekvatne vrijednosti signala na temelju korisnickog unosa/stringa
@@ -120,53 +120,53 @@ def kill(lista):
             os.kill(os.getpid(), signal)
         except:
             #   inace, ispis pogreske
-            return 'Pogreska. Naredba prima tocno jedan parametar, ID signala.'
+            return 'Pogreška. Naredba prima točno jedan parametar, ID signala.\n'
 
 #   mjenja direktorij ovisno o koristenom parametru
 def cd(lista):
     #   izvrsava se ako nema parametara
     if len(lista) == 1:
         os.chdir(kucni_dir)
-        return ''
+        return '\n'
     #   izvrsava se ako ima jedan parametar
     elif len(lista) == 2:
         #   radi se slice prva dva karaktera u parametru, za provjeru parametra
         param = lista[1][0:2]
         if param == '.':
-            return ''
+            return '\n'
         elif param == '..':
             roditelj = os.path.join(os.getcwd(), os.pardir)
             os.chdir(roditelj)
-            return ''
+            return '\n'
         elif param == './':
             #   ako je adresa nepostojeca, ispisuje se obavijest o pogresci
             try:
                 odrediste = lista[1].strip('./')
                 dublje = os.path.join(os.getcwd(), odrediste)
                 os.chdir(dublje)
-                return ''
+                return '\n'
             except:
-                return 'Nepostojeca adresa.'
+                return 'Nepostojeća adresa.\n'
         elif lista[1][0:1] == '/':
             try:
                 os.chdir(lista[1])
-                return ''
+                return '\n'
             except:
-                return 'Nepostojeca adresa.'
+                return 'Nepostojeća adresa.\n'
         else:
-            return 'Nepostojeci parametar.'
+            return 'Nepostojeći parametar.\n'
     #   izvrsava se ako ima previse parametara
     else:
-        return 'Dopusten je unos samo jednog parametra.'
+        return 'Dopušten je unos samo jednog parametra.\n'
 
 #   ispisuje posebno formatirano vrijeme, u kratkom ili dugom obliku dana u tjednu
 def date(lista):
     if len(lista) == 1:
-        return time.strftime("%H<>%M<>%S %A %d./%m./%Y", time.localtime())
+        return time.strftime("%H<>%M<>%S %A %d./%m./%Y", time.localtime()) + '\n'
     elif len(lista) == 2 and lista[1] == '-w':
-        return time.strftime("%H<>%M<>%S %a %d./%m./%Y", time.localtime())
+        return time.strftime("%H<>%M<>%S %a %d./%m./%Y", time.localtime()) + '\n'
     else:
-        return "Naredba prima najvise jedan parametar (-w)."
+        return "Naredba prima najviše jedan parametar (-w).\n"
 
 #   ispisuje sadrzaj direktorija, ovisno o adresi na koju pokazujemo
 def ls(lista):
@@ -207,7 +207,7 @@ def ls(lista):
             return to_print
         #   inace baca obavijest o krivom pristupu
         except:
-            return 'Nepostojeca adresa.'
+            return 'Nepostojeća adresa.\n'
     #   izvrsava se ukoliko je zadan dugi ispis direktorija na relativnoj adresi
     elif len(lista) == 3 and lista[1] == '-l' and lista[2][0:2] == './':
         try:
@@ -215,7 +215,7 @@ def ls(lista):
             dublje = os.path.join(os.getcwd(), odrediste)
             sadrzaj = os.scandir(dublje)
             to_print = ''
-            to_print += '{: <20}{: >10}{: >10}{: >10}{: >10}{: >10}'.format('Name', 'Mode' , 'Nlinks', 'UID', 'GID', 'Size') + '\n' 
+            to_print += '{:<20}{:>10}{:>10}{:>10}{:>10}{:>10}'.format('Name', 'Mode' , 'Nlinks', 'UID', 'GID', 'Size') + '\n' 
             to_print += ('-' * 70) + '\n'
             for dat in sadrzaj:
                 if not dat.name[0] == '.':
@@ -223,24 +223,24 @@ def ls(lista):
                     to_print += '{: <20}{: >10}{: >10}{: >10}{: >10}{: >10}'.format(dat.name, info.st_mode, info.st_nlink, info.st_uid, info.st_gid, info.st_size) + '\n'
             return to_print
         except:
-            return 'Nepostojeca adresa.'
+            return 'Nepostojeća adresa.\n'
     #   ispisuje pogresku ukoliko je uneseno previse argumenata, ili krivih
     else:
-        return 'Naredba prima najvise jedan parametar (-l) i jedan argument (rel. adresu).'
+        return 'Naredba prima najviše jedan parametar (-l) i jedan argument (rel. adresu).\n'
 
 #   stvara datoteku na adresi ukoliko ona ne postoji
 def touch(lista):
     odrediste = lista[1]
     if os.path.isfile(odrediste):
-        return 'Datoteka vec postoji.'
+        return 'Datoteka već postoji.\n'
     else:
         #   ako pristup ne uspijeva
         try:
             open(odrediste, 'w').close()
-            return ''
+            return '\n'
         #   ispisuje se pogreska
         except:
-            return 'Nepostojeca adresa.'
+            return 'Nepostojeća adresa.\n'
 
 #   brise datoteku na adresi ukoliko ona tamo postoji
 def rm(lista):
@@ -250,15 +250,213 @@ def rm(lista):
         return ''
     #   ispisuje pogresku ako je pristup datoteci nevaljan
     else:
-        return 'Datoteka ne postoji.'
+        return 'Datoteka ne postoji.\n'
 
+# serverska strana
 def remoteshd():
-    return
+    remoteConfig = configparser.ConfigParser()
+    remoteConfig.read('remoteshd.conf')
+
+    host = 'localhost'
+    port = int(remoteConfig['DEFAULT']['port'])
+    address = (host, port)
+
+    print('Veza otvorena na {}:{}\n'.format(host, port))
+
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.bind(address)
+    sock.listen(1)
+    clisock, addr = sock.accept()
+
+    # CITANJE DATOTEKE USERS-PASSWORD.CONF
+    usersConfig = configparser.ConfigParser()
+    usersConfig.read('users-passwords.conf')
+
+    users = []
+
+    for username in usersConfig['users-passwords']:
+        password = usersConfig['users-passwords'][username]
+        users.append((username, password))
+
+    print('Registrirani korisnici:')
+    print('{:<15}{}'.format('usr', 'pwd'))
+    print('{:<15}{}'.format('---', '---'))
+    for user in users:
+        print('{:<15}{}'.format(user[0], user[1]))
+    print('\n')
+
+    # primanje korisnickog imena
+    podaci = clisock.recv(1024)
+    username_client = podaci.decode()
+    print('Uneseni korisnik: ' + username_client)
+
+    # primanje zaporke
+    podaci = clisock.recv(1024)
+    password_client = podaci.decode()
+    print('Unesena zaporka: ' + password_client)
+
+    # LOGIN PROVJERA
+    login_success = False
+    for user in users:
+        hashed_password = crypt.crypt(password_client, user[1])
+        userdata_client = (username_client, hashed_password)
+        if user == userdata_client:
+            login_success = True
+
+    print('Uspješna prijava.' if login_success else 'Nepostojeći korisnik.', end='\n\n')
+
+    if login_success == True:
+
+        # slanje odgovora
+        poslani_podaci = str(login_success).encode()
+        clisock.send(poslani_podaci)
+
+        # primanje simetricnog kljuca
+        podaci = clisock.recv(1024)
+        ciphertext = podaci
+
+        print(podaci)
+
+        # citanje privatnog kljuca
+        config = configparser.ConfigParser()
+        config.read('remoteshd.conf')
+        private_key = bytes(config['DEFAULT']['key_prv'], encoding='utf-8')
+
+        private_key = serialization.load_pem_private_key(
+            private_key,
+            password=b'1234'
+            )
+
+        symmetric_key_decrypted = private_key.decrypt(
+            ciphertext,
+            padding.OAEP(
+                mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                algorithm=hashes.SHA256(),
+                label=None
+            )
+        )
+        print(symmetric_key_decrypted, end='\n\n')
+
+        f = Fernet(symmetric_key_decrypted)
+
+        is_running = True
+        while(is_running):
+
+            odziv = '(sh):' + ispisi_odziv()
+            podaci = f.encrypt(odziv.encode())
+            clisock.send(podaci)
+
+            podaci = clisock.recv(1024)
+            podaci_decrypted = f.decrypt(podaci)
+            podaci_decoded = podaci_decrypted.decode()
+                    
+
+            print(time.ctime())
+            print('Primljena naredba: ' + podaci_decoded)
+            print('Statusni kod: 0')
 
 
+            naredba_primljena = podaci_decoded.split()
+            rezultat = izvrsi(naredba_primljena)
+            rezultat_str = str(rezultat)
+
+            print('Izlaz naredbe:\n' + rezultat_str, end='\n')
+
+            podaci = f.encrypt(rezultat_str.encode())
+            clisock.send(podaci)
+
+            if rezultat == False:
+                is_running = False
+
+    clisock.close()
+    sock.close()
+    return ''
+
+# klijentska strana
 def remotesh():
+    host = 'localhost'
+    port = 5000
+    address = (host, port)
 
-    return
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.connect(address)
+
+    print('Povezan na {}:{}\n'.format(host, port))
+
+    # slanje korisnickog imena
+    print('Korisnicko ime: ', end='')
+    poruka = input()
+    podaci = poruka.encode()
+    sock.send(podaci)
+
+    # slanje zaporke
+    print('Zaporka: ', end='')
+    poruka = input()
+    podaci = poruka.encode()
+    sock.send(podaci)
+
+    # primanje zahvale
+    primljeni_podaci = sock.recv(1024)
+    login_success = bool(primljeni_podaci.decode())
+    print('Uspješna prijava.' if login_success else 'Nepostojeći korisnik.', end='\n\n')
+
+    if login_success == True:
+        # generiranje simetricnog kljuca
+        symmetric_key_client = Fernet.generate_key()
+        f = Fernet(symmetric_key_client)
+        print(symmetric_key_client)
+
+        # citanje javnog kljuca
+        config = configparser.ConfigParser()
+        config.read('remoteshd.conf')
+        public_key = bytes(config['DEFAULT']['key_pub'], encoding='utf-8')
+
+        public_key = serialization.load_pem_public_key(
+            public_key
+            )
+        print(public_key)
+
+        # enkripcija javnim kljucem
+        ciphertext = public_key.encrypt(
+            symmetric_key_client,
+            padding.OAEP(
+                mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                algorithm=hashes.SHA256(),
+                label=None
+            )
+        )
+        print(ciphertext, end='\n\n')
+
+        # slanje simetricnog kljuca
+        podaci = ciphertext
+        sock.send(podaci)
+
+        print('Pozdrav! ({})'.format(time.ctime()))
+
+        is_running = True
+        while (is_running):
+
+            odziv_encrypted = sock.recv(1024)
+            odziv = f.decrypt(odziv_encrypted)
+            print(odziv.decode(), end='')
+
+            naredba = input()
+            podaci = f.encrypt(naredba.encode())
+            sock.send(podaci)
+
+            rezultat_encrypted = sock.recv(1024)
+            rezultat_enkodiran = f.decrypt(rezultat_encrypted)
+            rezultat = rezultat_enkodiran.decode()
+
+            if rezultat == 'False':
+                is_running = False
+                rezultat = ''
+
+            print(rezultat, end = '\n')
+
+    # ssock.shutdown()
+    sock.close()
+    return ''
 
 # izlaz iz aplikacije slanjem False vrijednosti koja prekida glavnu petlju
 def izlaz():
@@ -296,7 +494,7 @@ def oduzmi_kvad(id, pocetak, kraj):
     #   nit ide na cekanje drugih nakon svog izvrsavanja
     barijera.wait()
     if id == 2:
-        print('Sve niti su izvrsile rad.')
+        print('Sve niti su izvrsile rad.\n')
 
 #   funkcija koja pokrece niti i instancira datoteku result.txt u kucnom direktoriju
 def kvadrat(lista):
@@ -309,7 +507,7 @@ def kvadrat(lista):
     nit2.join()
     nit3.join()
     nit4.join()
-    return ''
+    return '\n'
 
 #   cetiri niti koje dijele resurs broj i izvrsavaju zadacu oduzimanja kvadrata
 #   zadacu kvadriranja brojeva od 1 do 95959 dijele proslijedjujuci svoj pocetak i kraj u funkciju
@@ -328,7 +526,8 @@ print('Pozdrav! ({})'.format(vrijeme))
 #   glavna petlja
 is_running = True
 while (is_running):
-    ispisi_odziv()
+    odziv = ispisi_odziv()
+    print(odziv, end='')
     unos = input()
     unos_split = unos.split()
     #   ako je lista prazna, preskoci egzekuciju (kako se ne bi pristupalo indeksima kojih nema)
@@ -338,31 +537,11 @@ while (is_running):
     else:
         povijest.append(unos)
         rezultat = izvrsi(unos_split)
+        # u slucaju izlaza, petlja se prekida
         if rezultat == False :
             is_running = False
             rezultat = ''
-        print(rezultat)
-
-
-# while (True)
-#     klijent
-#         while (True):
-#             ispisi_odziv()
-#             unos = input()
-#             podaci = unos.encrypt()
-#             send(podaci)
-
-#             recv(1024)
-
-#     server
-#         recv(1024)
-
-#         unos_split = unos.split()
-#         podaci = ''
-#         if not unos_split:
-#             continue
-#         else:
-#             povijest.append(unos)
-#             podaci = izvrsi(unos_split)
-
-#         send(podaci)
+        elif rezultat == None:
+            rezultat = ''
+        else:
+            print(rezultat)
