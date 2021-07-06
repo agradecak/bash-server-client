@@ -4,6 +4,7 @@ import os, time, sys, signal, threading, configparser, socket, crypt
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.fernet import Fernet
+from hmac import compare_digest as compare_hash
 
 
 #   ________________________________________________________________________________
@@ -290,36 +291,36 @@ def remoteshd():
         print('{:<15}{}'.format(user[0], user[1]))
     print('')
 
-    # primanje korisnickog imena
-    podaci = clisock.recv(1024)
-    cliuser = podaci.decode()
-    print('Uneseni korisnik: ' + cliuser)
-
-    # primanje zaporke
-    podaci = clisock.recv(1024)
-    clipass = podaci.decode()
-    print('Unesena zaporka: ' + clipass)
-
-    # hashiranje primljene zaporke i provjera sa postojećim zapisima
     login_success = False
-    for user in users:
-        hashed_password = crypt.crypt(clipass, user[1])
-        userdata_client = (cliuser, hashed_password)
-        if user == userdata_client:
-            login_success = True
+    while not login_success:
+        # primanje korisnickog imena
+        podaci = clisock.recv(1024)
+        cliuser = podaci.decode()
+        print('Uneseni korisnik: ' + cliuser)
 
-    # ispis uspješnosti prijave
-    print('Uspješna prijava.' if login_success else 'Nepostojeći korisnik.', end='\n\n')
+        # primanje zaporke
+        podaci = clisock.recv(1024)
+        clipass = podaci.decode()
+        print('Unesena zaporka: ' + clipass)
+
+        # provjera hashiranih zaporki
+        for user in users:
+            hashes_match = compare_hash((crypt.crypt(clipass, user[1])), user[1])
+            if user[0] == cliuser and hashes_match:
+                login_success = True
+
+        # ispis uspješnosti prijave
+        print('Uspješna prijava.' if login_success else 'Nepostojeći korisnik.', end='\n\n')
+
+        # slanje stanja uspješnosti prijave
+        podaci = str(login_success).encode()
+        clisock.send(podaci)
 
     # pamćenje trenutnog direktorija glavnog shella
     pocetni_direktorij = os.getcwd()
 
     # ostatak programa se odvija samo u slučaju uspješne prijave
     if login_success == True:
-        # slanje stanja uspješnosti prijave
-        podaci = str(login_success).encode()
-        clisock.send(podaci)
-
         # primanje simetričnog ključa
         podaci = clisock.recv(1024)
         symmetric_key_encrypted = podaci
@@ -401,25 +402,33 @@ def remotesh():
     sock.connect(address)
     print('Povezan na {}:{}\n'.format(host, port))
 
-    # slanje korisnickog imena
-    print('Korisnicko ime: ', end='')
-    poruka = input()
-    podaci = poruka.encode()
-    sock.send(podaci)
+    login_success = False
+    while not login_success:
+        # slanje korisnickog imena
+        print('Korisnicko ime: ', end='')
+        poruka = input()
+        podaci = poruka.encode()
+        sock.send(podaci)
 
-    # slanje zaporke
-    print('Zaporka: ', end='')
-    poruka = input()
-    podaci = poruka.encode()
-    sock.send(podaci)
+        # slanje zaporke
+        print('Zaporka: ', end='')
+        poruka = input()
+        podaci = poruka.encode()
+        sock.send(podaci)
 
-    # primanje i ispis poruke uspjeha/neuspjeha
-    primljeni_podaci = sock.recv(1024)
-    login_success = bool(primljeni_podaci.decode())
-    print('Uspješna prijava.' if login_success else 'Nepostojeći korisnik.', end='\n\n')
+        # primanje i ispis poruke uspjeha/neuspjeha
+        primljeni_podaci = sock.recv(1024)
+        login_success_state = primljeni_podaci.decode()
+
+        if login_success_state == 'True':
+            login_success = True
+        else:
+            login_success = False
+
+        print('Uspješna prijava.' if login_success else 'Nepostojeći korisnik.', end='\n\n')
 
     # ostatak programa se odvija samo u slučaju uspješne prijave
-    if login_success == True:
+    if login_success:
         # generiranje simetričnog kljuca
         symmetric_key = Fernet.generate_key()
         f = Fernet(symmetric_key)
