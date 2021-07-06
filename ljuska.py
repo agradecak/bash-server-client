@@ -4,7 +4,6 @@ import os, time, sys, signal, threading, configparser, socket, crypt
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.fernet import Fernet
-from hmac import compare_digest as compare_hash
 
 
 #   ________________________________________________________________________________
@@ -76,14 +75,14 @@ def izvrsi(naredba_lista):
 #   ispisuje apsolutnu adresu trenutnog direktorija ili obavjestava o krivom unosu
 def pwd(lista):
     if len(lista) == 1:
-        return os.getcwd()
+        return os.getcwd() + '\n'
     else:
         return "Naredba ne prima parametre ni argumente.\n"
 
 #   ispisuje PID trenutnog procesa ili obavjestava o krivom unosu
 def ps(lista):
     if len(lista) == 1:
-	    return os.getpid()
+	    return str(os.getpid()) + '\n'
     else:
 	    return "Nepostojeći parametar ili argument.\n"
 
@@ -127,30 +126,30 @@ def cd(lista):
     #   izvrsava se ako nema parametara
     if len(lista) == 1:
         os.chdir(kucni_dir)
-        return '\n'
+        return ''
     #   izvrsava se ako ima jedan parametar
     elif len(lista) == 2:
         #   radi se slice prva dva karaktera u parametru, za provjeru parametra
         param = lista[1][0:2]
         if param == '.':
-            return '\n'
+            return ''
         elif param == '..':
             roditelj = os.path.join(os.getcwd(), os.pardir)
             os.chdir(roditelj)
-            return '\n'
+            return ''
         elif param == './':
             #   ako je adresa nepostojeca, ispisuje se obavijest o pogresci
             try:
                 odrediste = lista[1].strip('./')
                 dublje = os.path.join(os.getcwd(), odrediste)
                 os.chdir(dublje)
-                return '\n'
+                return ''
             except:
                 return 'Nepostojeća adresa.\n'
         elif lista[1][0:1] == '/':
             try:
                 os.chdir(lista[1])
-                return '\n'
+                return ''
             except:
                 return 'Nepostojeća adresa.\n'
         else:
@@ -237,7 +236,7 @@ def touch(lista):
         #   ako pristup ne uspijeva
         try:
             open(odrediste, 'w').close()
-            return '\n'
+            return ''
         #   ispisuje se pogreska
         except:
             return 'Nepostojeća adresa.\n'
@@ -254,81 +253,91 @@ def rm(lista):
 
 # serverska strana
 def remoteshd():
+    # citanje remoteshd.conf
     remoteConfig = configparser.ConfigParser()
     remoteConfig.read('remoteshd.conf')
 
+    # čitanje vrata te postavljanje adrese za uspostavu konekcije
     host = 'localhost'
     port = int(remoteConfig['DEFAULT']['port'])
     address = (host, port)
 
-    print('Veza otvorena na {}:{}\n'.format(host, port))
-
+    # otvaranje socketa na navedenoj adresi
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.bind(address)
     sock.listen(1)
-    clisock, addr = sock.accept()
+    clisock, cliaddr = sock.accept()
 
-    # CITANJE DATOTEKE USERS-PASSWORD.CONF
+    print('Klijent pristiže sa {}:{}\n'.format(cliaddr[0], cliaddr[1]))
+
+    # čitanje datoteke users-password.conf
     usersConfig = configparser.ConfigParser()
     usersConfig.read('users-passwords.conf')
 
+    # lista sprema učitane/registrirane korisnike
     users = []
 
+    # lista se puni učitanim korisnicima (touple)
     for username in usersConfig['users-passwords']:
         password = usersConfig['users-passwords'][username]
         users.append((username, password))
 
+    # ispis registriranih korisnika
     print('Registrirani korisnici:')
     print('{:<15}{}'.format('usr', 'pwd'))
     print('{:<15}{}'.format('---', '---'))
     for user in users:
         print('{:<15}{}'.format(user[0], user[1]))
-    print('\n')
+    print('')
 
     # primanje korisnickog imena
     podaci = clisock.recv(1024)
-    username_client = podaci.decode()
-    print('Uneseni korisnik: ' + username_client)
+    cliuser = podaci.decode()
+    print('Uneseni korisnik: ' + cliuser)
 
     # primanje zaporke
     podaci = clisock.recv(1024)
-    password_client = podaci.decode()
-    print('Unesena zaporka: ' + password_client)
+    clipass = podaci.decode()
+    print('Unesena zaporka: ' + clipass)
 
-    # LOGIN PROVJERA
+    # hashiranje primljene zaporke i provjera sa postojećim zapisima
     login_success = False
     for user in users:
-        hashed_password = crypt.crypt(password_client, user[1])
-        userdata_client = (username_client, hashed_password)
+        hashed_password = crypt.crypt(clipass, user[1])
+        userdata_client = (cliuser, hashed_password)
         if user == userdata_client:
             login_success = True
 
+    # ispis uspješnosti prijave
     print('Uspješna prijava.' if login_success else 'Nepostojeći korisnik.', end='\n\n')
 
+    # pamćenje trenutnog direktorija glavnog shella
+    pocetni_direktorij = os.getcwd()
+
+    # ostatak programa se odvija samo u slučaju uspješne prijave
     if login_success == True:
+        # slanje stanja uspješnosti prijave
+        podaci = str(login_success).encode()
+        clisock.send(podaci)
 
-        # slanje odgovora
-        poslani_podaci = str(login_success).encode()
-        clisock.send(poslani_podaci)
-
-        # primanje simetricnog kljuca
+        # primanje simetričnog ključa
         podaci = clisock.recv(1024)
-        ciphertext = podaci
+        symmetric_key_encrypted = podaci
+        print(symmetric_key_encrypted)
 
-        print(podaci)
-
-        # citanje privatnog kljuca
+        # citanje privatnog kljuca iz remoteshd.conf
         config = configparser.ConfigParser()
         config.read('remoteshd.conf')
         private_key = bytes(config['DEFAULT']['key_prv'], encoding='utf-8')
 
+        # pretvaranje byte zapisa u objekt za dešifriranje
         private_key = serialization.load_pem_private_key(
             private_key,
             password=b'1234'
             )
 
         symmetric_key_decrypted = private_key.decrypt(
-            ciphertext,
+            symmetric_key_encrypted,
             padding.OAEP(
                 mgf=padding.MGF1(algorithm=hashes.SHA256()),
                 algorithm=hashes.SHA256(),
@@ -337,50 +346,59 @@ def remoteshd():
         )
         print(symmetric_key_decrypted, end='\n\n')
 
+        # stvaranje Fernet objekta za daljnje šifriranje
         f = Fernet(symmetric_key_decrypted)
 
+        # glavna petlja izvođenja shell naredbi
         is_running = True
         while(is_running):
-
+            # postavljanje odziva i slanje klijentu
             odziv = '(sh):' + ispisi_odziv()
             podaci = f.encrypt(odziv.encode())
             clisock.send(podaci)
 
+            # primanje naredbe
             podaci = clisock.recv(1024)
-            podaci_decrypted = f.decrypt(podaci)
-            podaci_decoded = podaci_decrypted.decode()
+            naredba_decrypted = f.decrypt(podaci)
+            naredba = naredba_decrypted.decode()
                     
-
+            # ispis podataka o primljenoj naredbi
             print(time.ctime())
-            print('Primljena naredba: ' + podaci_decoded)
+            print('Primljena naredba: ' + naredba)
             print('Statusni kod: 0')
 
-
-            naredba_primljena = podaci_decoded.split()
-            rezultat = izvrsi(naredba_primljena)
+            # split-anje naredbe, izvršavanje i ispis rezultata
+            naredba_split = naredba.split()
+            rezultat = izvrsi(naredba_split)
             rezultat_str = str(rezultat)
-
             print('Izlaz naredbe:\n' + rezultat_str, end='\n')
 
+            # slanje rezultata
             podaci = f.encrypt(rezultat_str.encode())
             clisock.send(podaci)
 
+            # izlaz iz remote shell-a
             if rezultat == False:
                 is_running = False
 
+    # vraćanje na zapamćeni direktorij (glavnog shella)
+    os.chdir(pocetni_direktorij)
+
+    # zatvaranje konekcije
     clisock.close()
     sock.close()
     return ''
 
 # klijentska strana
 def remotesh():
+    # postavljanje adrese na koju se vrši povezivanje
     host = 'localhost'
     port = 5000
     address = (host, port)
 
+    # spajanje i ispis adrese
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.connect(address)
-
     print('Povezan na {}:{}\n'.format(host, port))
 
     # slanje korisnickog imena
@@ -395,70 +413,78 @@ def remotesh():
     podaci = poruka.encode()
     sock.send(podaci)
 
-    # primanje zahvale
+    # primanje i ispis poruke uspjeha/neuspjeha
     primljeni_podaci = sock.recv(1024)
     login_success = bool(primljeni_podaci.decode())
     print('Uspješna prijava.' if login_success else 'Nepostojeći korisnik.', end='\n\n')
 
+    # ostatak programa se odvija samo u slučaju uspješne prijave
     if login_success == True:
-        # generiranje simetricnog kljuca
-        symmetric_key_client = Fernet.generate_key()
-        f = Fernet(symmetric_key_client)
-        print(symmetric_key_client)
+        # generiranje simetričnog kljuca
+        symmetric_key = Fernet.generate_key()
+        f = Fernet(symmetric_key)
+        print(symmetric_key)
 
-        # citanje javnog kljuca
+        # čitanje javnog ključa za enkripciju
         config = configparser.ConfigParser()
         config.read('remoteshd.conf')
         public_key = bytes(config['DEFAULT']['key_pub'], encoding='utf-8')
 
+        # pretvaranje ključa u objekt za enkripciju
         public_key = serialization.load_pem_public_key(
             public_key
             )
         print(public_key)
 
-        # enkripcija javnim kljucem
-        ciphertext = public_key.encrypt(
-            symmetric_key_client,
+        # enkripcija javnim ključem i ispis ključa
+        symmetric_key_encrypted = public_key.encrypt(
+            symmetric_key,
             padding.OAEP(
                 mgf=padding.MGF1(algorithm=hashes.SHA256()),
                 algorithm=hashes.SHA256(),
                 label=None
             )
         )
-        print(ciphertext, end='\n\n')
+        print(symmetric_key_encrypted, end='\n\n')
 
-        # slanje simetricnog kljuca
-        podaci = ciphertext
+        # slanje simetričnog ključa
+        podaci = symmetric_key_encrypted
         sock.send(podaci)
 
+        # ispis pozdravne poruke
         print('Pozdrav! ({})'.format(time.ctime()))
 
+        # glavna petlja slanja i primanja rezultata naredbi
         is_running = True
         while (is_running):
-
+            # primanje odziva za ispis
             odziv_encrypted = sock.recv(1024)
             odziv = f.decrypt(odziv_encrypted)
             print(odziv.decode(), end='')
 
+            # input naredbe i slanje
             naredba = input()
             podaci = f.encrypt(naredba.encode())
             sock.send(podaci)
 
+            # primanje rezultata
             rezultat_encrypted = sock.recv(1024)
-            rezultat_enkodiran = f.decrypt(rezultat_encrypted)
-            rezultat = rezultat_enkodiran.decode()
+            rezultat_encoded = f.decrypt(rezultat_encrypted)
+            rezultat = rezultat_encoded.decode()
 
+            # u slučaju primanja 'False' stringa, izlazimo iz petlje
             if rezultat == 'False':
                 is_running = False
                 rezultat = ''
 
+            # ispis rezultata
             print(rezultat, end = '\n')
 
-    # ssock.shutdown()
+    # zatvaranje konekcije
     sock.close()
     return ''
 
-# izlaz iz aplikacije slanjem False vrijednosti koja prekida glavnu petlju
+# izlaz iz aplikacije
 def izlaz():
     #   ispisuje sadrzaj liste povijest u datoteku .hist prije izlaza iz sesije
     povijest_ispis = open(kucni_dir + '/.hist', 'w')
@@ -466,6 +492,7 @@ def izlaz():
         povijest_ispis.write(stavka)
         povijest_ispis.write('\n')
     povijest_ispis.close()
+    # šalje se False vrijednost koja signalizira prekidanje glavne petlje programa
     return False
 
 
@@ -507,7 +534,7 @@ def kvadrat(lista):
     nit2.join()
     nit3.join()
     nit4.join()
-    return '\n'
+    return ''
 
 #   cetiri niti koje dijele resurs broj i izvrsavaju zadacu oduzimanja kvadrata
 #   zadacu kvadriranja brojeva od 1 do 95959 dijele proslijedjujuci svoj pocetak i kraj u funkciju
