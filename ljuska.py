@@ -2,6 +2,7 @@
 #   MODULI
 import os, time, sys, signal, threading, configparser, socket, crypt
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
+# from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.fernet import Fernet
 from hmac import compare_digest as compare_hash
@@ -293,19 +294,40 @@ def remoteshd():
 
     login_success = False
     while not login_success:
-        # primanje korisnickog imena
+        # primanje korisničkog imena
         podaci = clisock.recv(1024)
         cliuser = podaci.decode()
         print('Uneseni korisnik: ' + cliuser)
 
-        # primanje zaporke
-        podaci = clisock.recv(1024)
-        clipass = podaci.decode()
-        print('Unesena zaporka: ' + clipass)
+        # citanje privatnog ključa iz remoteshd.conf
+        config = configparser.ConfigParser()
+        config.read('remoteshd.conf')
+        private_key = bytes(config['DEFAULT']['key_prv'], encoding='utf-8')
 
-        # provjera hashiranih zaporki
+        # deserijalizacija privatnog ključa u objekt za dekripciju
+        private_key = serialization.load_pem_private_key(
+            private_key,
+            password=b'1234'
+        )
+
+        # primanje enkriptirane zaporke
+        password_encrypted = clisock.recv(1024)
+
+        # dekripcija privatnim ključem, dekodiranje i ispis
+        password_encoded = private_key.decrypt(
+            password_encrypted,
+            padding.OAEP(
+                mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                algorithm=hashes.SHA256(),
+                label=None
+            )
+        )
+        password = password_encoded.decode()
+        print('Unesena zaporka: ' + password)
+
+        # provjera podudaranosti hasheva zaporki
         for user in users:
-            hashes_match = compare_hash((crypt.crypt(clipass, user[1])), user[1])
+            hashes_match = compare_hash((crypt.crypt(password, user[1])), user[1])
             if user[0] == cliuser and hashes_match:
                 login_success = True
 
@@ -324,18 +346,7 @@ def remoteshd():
         # primanje simetričnog ključa
         podaci = clisock.recv(1024)
         symmetric_key_encrypted = podaci
-        print(symmetric_key_encrypted)
-
-        # citanje privatnog kljuca iz remoteshd.conf
-        config = configparser.ConfigParser()
-        config.read('remoteshd.conf')
-        private_key = bytes(config['DEFAULT']['key_prv'], encoding='utf-8')
-
-        # pretvaranje byte zapisa u objekt za dešifriranje
-        private_key = serialization.load_pem_private_key(
-            private_key,
-            password=b'1234'
-            )
+        print('Simetrični ključ (enkr.):\n{}\n'.format(symmetric_key_encrypted))
 
         symmetric_key_decrypted = private_key.decrypt(
             symmetric_key_encrypted,
@@ -345,7 +356,7 @@ def remoteshd():
                 label=None
             )
         )
-        print(symmetric_key_decrypted, end='\n\n')
+        print('Simetrični ključ: {}\n'.format(symmetric_key_decrypted))
 
         # stvaranje Fernet objekta za daljnje šifriranje
         f = Fernet(symmetric_key_decrypted)
@@ -406,14 +417,34 @@ def remotesh():
     while not login_success:
         # slanje korisnickog imena
         print('Korisnicko ime: ', end='')
-        poruka = input()
-        podaci = poruka.encode()
+        username = input()
+        podaci = username.encode()
         sock.send(podaci)
 
-        # slanje zaporke
+        # čitanje javnog ključa za enkripciju
+        config = configparser.ConfigParser()
+        config.read('remoteshd.conf')
+        public_key = bytes(config['DEFAULT']['key_pub'], encoding='utf-8')
+
+        # deserijalizacija javnog ključa u objekt za enkripciju
+        public_key = serialization.load_pem_public_key(
+            public_key
+        )
+
+        # korisnički unos zaporke
         print('Zaporka: ', end='')
-        poruka = input()
-        podaci = poruka.encode()
+        password = input()
+
+        # enkripcija zaporke javnim ključem i slanje
+        password_encrypted = public_key.encrypt(
+            password.encode(),
+            padding.OAEP(
+                mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                algorithm=hashes.SHA256(),
+                label=None
+            )
+        )
+        podaci = password_encrypted
         sock.send(podaci)
 
         # primanje i ispis poruke uspjeha/neuspjeha
@@ -432,18 +463,6 @@ def remotesh():
         # generiranje simetričnog kljuca
         symmetric_key = Fernet.generate_key()
         f = Fernet(symmetric_key)
-        print(symmetric_key)
-
-        # čitanje javnog ključa za enkripciju
-        config = configparser.ConfigParser()
-        config.read('remoteshd.conf')
-        public_key = bytes(config['DEFAULT']['key_pub'], encoding='utf-8')
-
-        # pretvaranje ključa u objekt za enkripciju
-        public_key = serialization.load_pem_public_key(
-            public_key
-            )
-        print(public_key)
 
         # enkripcija javnim ključem i ispis ključa
         symmetric_key_encrypted = public_key.encrypt(
@@ -454,7 +473,6 @@ def remotesh():
                 label=None
             )
         )
-        print(symmetric_key_encrypted, end='\n\n')
 
         # slanje simetričnog ključa
         podaci = symmetric_key_encrypted
@@ -492,6 +510,56 @@ def remotesh():
     # zatvaranje konekcije
     sock.close()
     return ''
+
+# def napad():
+#     # postavljanje adrese na koju se vrši povezivanje
+#     host = 'localhost'
+#     port = 5000
+#     address = (host, port)
+
+#     # spajanje i ispis adrese
+#     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+#     sock.connect(address)
+#     print('Povezan na {}:{}\n'.format(host, port))
+
+#     login_success = False
+#     while not login_success:
+#         # slanje korisnickog imena
+#         print('Korisnicko ime: ', end='')
+#         podaci = 'dora8'.encode()
+#         sock.send(podaci)
+
+#         key = os.urandom(5)
+#         algorithm = algorithms.ARC4(key)
+#         cipher = Cipher(algorithm, mode=None)
+
+#         decryptor = cipher.decryptor()
+#         decrypted_msg = decryptor.update(encrypted_msg)
+
+#         # slanje zaporke
+#         print('Zaporka: ', end='')
+#         poruka = input()
+#         podaci = poruka.encode()
+#         sock.send(podaci)
+
+#         # primanje i ispis poruke uspjeha/neuspjeha
+#         primljeni_podaci = sock.recv(1024)
+#         login_success_state = primljeni_podaci.decode()
+
+#         if login_success_state == 'True':
+#             login_success = True
+#         else:
+#             login_success = False
+
+#         print('Uspješna prijava.' if login_success else 'Nepostojeći korisnik.', end='\n\n')
+
+#     # ostatak programa se odvija samo u slučaju uspješne prijave
+#     if login_success:
+#         print('Napad je uspio', end='\n\n')
+
+#     # zatvaranje konekcije
+#     sock.close()
+#     return ''
 
 # izlaz iz aplikacije
 def izlaz():
